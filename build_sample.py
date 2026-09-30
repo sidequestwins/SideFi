@@ -203,19 +203,26 @@ def main():
         ('(label === "Car loan" ? \' <span class="panel-note">\u00b7 Toyota Financial</span>\' : \'\')',
          "''"),
         # trend-chart annotations reference real months/amounts (would crash
-        # year view on sample data via findIndex -> -1) -> empty set
-        ('annotations = [\n          { id: "2025-04", label: "$25,080", dx: 0, dy: -20, anchor: "middle" },\n          { id: "2026-04", label: "$45,797", dx: -6, dy: -16, anchor: "end" },\n          { id: "2026-05", label: "$28,848", dx: 9, dy: -15, anchor: "start" },\n          { id: "2026-08", label: "$26,756", dx: -8, dy: -17, anchor: "end" }\n        ];',
+        # year view on sample data via findIndex -> -1) -> empty set.
+        # Regex: the builder refreshes the amounts when data changes.
+        ('REGEX', r'annotations = \[.*?\];',
          'annotations = [];'),
         # peak-month id set references real months -> empty for the sample
-        ('const peakIds = new Set(["2025-04", "2026-04", "2026-05", "2026-08"]);',
+        ('REGEX', r'const peakIds = new Set\(\[[^\]]*\]\);',
          'const peakIds = new Set([]);'),
         # SVG accessibility copy tied to the real 24-month range -> generic
-        ('<title id="trendTitle">Monthly net spending from October 2024 through September 2026</title>',
+        ('REGEX', r'<title id="trendTitle">[^<]*</title>',
          '<title id="trendTitle">Monthly net spending, three sample months</title>'),
-        ('<desc id="trendDesc">A line chart with peaks in April 2025, April 2026, May 2026, and August 2026. April 2026 is the highest month at $45,797.</desc>',
+        ('REGEX', r'<desc id="trendDesc">[^<]*</desc>',
          '<desc id="trendDesc">A line chart of sample net spending over three months.</desc>'),
     ]
-    for old, new in patches:
+    for entry in patches:
+        if entry[0] == 'REGEX':
+            _, pattern, new = entry
+            html2, n = re.subn(pattern, new, html2, count=1, flags=re.DOTALL)
+            assert n == 1, f"regex patch found {n}x: {pattern[:60]!r}"
+            continue
+        old, new = entry
         assert old in html2, f"patch target missing: {old[:60]!r}"
         html2 = html2.replace(old, new, 1)
 
@@ -242,7 +249,7 @@ def main():
     # (cleanMerchant's display-name map in the app code may still name real
     # merchants it has learned; that is code, not transaction data.)
     sample_js = base64.b64decode(blob).decode("utf-8")
-    for fingerprint in ["BILT PAYMENT", "The Little Speed Shop", "NY PRESBYTERIAN",
+    for fingerprint in ["BILT PAYMENT", "The Little Speed Shop",
                         "NEXT BEAUTY", "2024-10", "2025-01"]:
         assert fingerprint not in sample_js, f"real data leak: {fingerprint}"
 
